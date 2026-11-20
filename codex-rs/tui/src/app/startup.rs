@@ -1105,6 +1105,7 @@ See the Codex keymap documentation for supported actions and examples."
             cloud_title_shutdown: Default::default(),
             pending_thread_titles: HashMap::new(),
             thread_event_listener_tasks: HashMap::new(),
+            agent_console: agent_console::AgentConsole::from_environment()?,
             agent_navigation: AgentNavigationState::default(),
             backend_registry: super::backend_registry::BackendRegistry::new(
                 std::iter::once(&app_server)

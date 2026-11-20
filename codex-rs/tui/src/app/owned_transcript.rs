@@ -631,6 +631,10 @@ impl App {
             if let Some(area) = self.hover_target_area(hover_mouse, frame.buffer) {
                 super::link_hover::paint_hover_foreground(area, frame.buffer);
             }
+            if let Some(console) = &mut self.agent_console {
+                frames.schedule_frame_in(std::time::Duration::from_secs(1));
+                console.paint(frame.buffer, self.active_thread_id);
+            }
             self.paint_centered_dialog(frame);
         })?;
         // A shortcut HUD is painted after the conversation and can move over a stationary pointer.
@@ -650,6 +654,11 @@ impl App {
         self.conversation_frame.sidebar = None;
         self.conversation_frame.chat_strip = None;
         let area = self.conversation_area(viewport);
+        let area = if let Some(console) = self.agent_console.as_mut() {
+            console.split(area)
+        } else {
+            area
+        };
         if let Some((previous, reflowed)) = self.chat_widget.resize_owned_conversation(area.width) {
             self.transcript_view
                 .rebind_observed_live_revision(previous, reflowed);

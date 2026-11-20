@@ -198,6 +198,7 @@ use tokio_util::sync::CancellationToken;
 use toml::Value as TomlValue;
 use uuid::Uuid;
 mod account_status;
+mod agent_console;
 mod agent_message_consolidation;
 mod agent_navigation;
 mod agent_picker;
@@ -676,6 +677,7 @@ pub(crate) struct App {
     cloud_title_shutdown: tokio::sync::watch::Sender<()>,
     pending_thread_titles: HashMap<(ThreadId, ThreadTitleDestination), CancellationToken>,
     thread_event_listener_tasks: HashMap<ThreadId, JoinHandle<()>>,
+    agent_console: Option<agent_console::AgentConsole>,
     agent_navigation: AgentNavigationState,
     agents_overview: agents_overview::AgentsOverviewState,
     side_threads: HashMap<ThreadId, SideThreadState>,
@@ -884,6 +886,23 @@ impl App {
         app_server: &mut AppServerSession,
         event: TuiEvent,
     ) -> Result<AppRunControl> {
+        if self
+            .agent_console
+            .as_ref()
+            .is_some_and(|console| console.detail.is_some())
+        {
+            if self.chat_widget.has_active_modal() || self.overlay.is_some() {
+                if let Some(console) = &mut self.agent_console {
+                    console.detail = None;
+                }
+            } else {
+                if let Err(err) = self.agent_console_detail(tui, app_server, event).await {
+                    self.chat_widget.add_error_message(err.to_string());
+                    tui.frame_requester().schedule_frame();
+                }
+                return Ok(AppRunControl::Continue);
+            }
+        }
         match &event {
             TuiEvent::Draw
             | TuiEvent::Mouse(crossterm::event::MouseEvent {
@@ -929,6 +948,21 @@ impl App {
             }
             tui.frame_requester().schedule_frame();
             return Ok(AppRunControl::Continue);
+        }
+        if self.agent_console.is_some()
+            && tui.is_owned_screen()
+            && self.overlay.is_none()
+            && self.chat_widget.no_modal_or_popup_active()
+        {
+            match self.agent_console_input(tui, app_server, &event).await {
+                Ok(true) => return Ok(AppRunControl::Continue),
+                Err(error) => {
+                    self.chat_widget.add_error_message(error.to_string());
+                    tui.frame_requester().schedule_frame();
+                    return Ok(AppRunControl::Continue);
+                }
+                Ok(false) => {}
+            }
         }
         self.observe_pointer(tui, &event);
         if Box::pin(sidebar_close::handle(self, tui, app_server, &event)).await {

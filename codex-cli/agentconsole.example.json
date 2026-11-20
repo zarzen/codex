@@ -1,0 +1,19 @@
+{
+  "main": {
+    "instructions": "Coordinate engineering tasks. Use delegate_task whenever a configured component would help.",
+    "model": "gpt-6.2-sol"
+  },
+  "components": {
+    "reviewer": {
+      "instructions": "Review code for correctness and explain your findings.",
+      "model": "gpt-6.2-astra"
+    },
+    "implementer": {
+      "instructions": "Implement requested changes and verify their behavior.",
+      "model": "gpt-6.1-sol"
+    }
+  },
+  "observer": {
+    "model": "gpt-6.2-sol"
+  }
+}

@@ -25,6 +25,7 @@ pub(crate) struct TranscriptOverlay {
     cursor: Option<(u16, u16)>,
     notice: Option<String>,
     pub(crate) pending_thread_link: Option<codex_protocol::ThreadId>,
+    pub(crate) panel_title: Option<String>,
     pub(crate) browsing_footer: Option<Line<'static>>,
     find_transcript: Vec<crate::key_hint::KeyBinding>,
     select_transcript: Vec<crate::key_hint::KeyBinding>,
@@ -42,6 +43,10 @@ impl Overlay {
 }
 
 impl TranscriptOverlay {
+    pub(crate) fn selected_excerpt(&mut self) -> Option<String> {
+        self.view.selected_text(&self.cells)
+    }
+
     pub(crate) fn bookmark(&mut self) -> TranscriptBookmark {
         self.view.bookmark(&self.cells)
     }
@@ -74,6 +79,7 @@ impl TranscriptOverlay {
             cursor: None,
             notice: None,
             pending_thread_link: None,
+            panel_title: None,
             browsing_footer: None,
             find_transcript: Vec::new(),
             select_transcript: Vec::new(),
@@ -111,10 +117,18 @@ impl TranscriptOverlay {
             self.view.render(self.content_area, buf, &self.cells);
         }
         let header = Rect::new(area.x, area.y, area.width, area.height.min(/*other*/ 1));
-        Span::from("/ ".repeat(area.width as usize / 2))
-            .dim()
-            .render(header, buf);
-        "/ T R A N S C R I P T".dim().render(header, buf);
+        if let Some(title) = &self.panel_title {
+            ratatui::widgets::Block::default()
+                .borders(ratatui::widgets::Borders::TOP)
+                .border_style(crate::style::accent_style())
+                .title(title.as_str())
+                .render(header, buf);
+        } else {
+            Span::from("/ ".repeat(area.width as usize / 2))
+                .dim()
+                .render(header, buf);
+            "/ T R A N S C R I P T".dim().render(header, buf);
+        }
         let status = Rect::new(
             area.x,
             self.content_area.bottom(),

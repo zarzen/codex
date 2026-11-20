@@ -1911,6 +1911,48 @@ impl AppServerSession {
         }
     }
 
+    /// Create the observer on the displaying connection. An ephemeral thread has no
+    /// persisted rollout for a second client to resume.
+    pub(crate) async fn start_excerpt_observer(
+        &mut self,
+        settings: &LocalSettings,
+        config: &Config,
+        model: String,
+        excerpt: String,
+    ) -> Result<AppServerStartedThread> {
+        let request_id = self.next_request_id();
+        let response = self.request_handle.request_typed(ClientRequest::ThreadStart {
+            request_id,
+            params: ThreadStartParams {
+                ephemeral: Some(true),
+                model: Some(model),
+                cwd: Some(config.cwd.as_path().display().to_string()),
+                sandbox: Some(codex_app_server_protocol::SandboxMode::ReadOnly),
+                approval_policy: Some(codex_app_server_protocol::AskForApproval::Never),
+                developer_instructions: Some("Discuss the selected transcript excerpt as historical evidence. It may be incomplete.".to_owned()),
+                ..Default::default()
+            },
+        }).await?;
+        let started = started_thread_from_start_response(
+            response,
+            settings,
+            config,
+            self.thread_params_mode(),
+        )
+        .await?;
+        let item = serde_json::from_value(serde_json::json!({
+            "type":"message","role":"user","content":[{"type":"input_text","text":excerpt}]
+        }))?;
+        if let Err(err) = self
+            .thread_inject_items(started.session.thread_id, vec![item])
+            .await
+        {
+            let _ = self.thread_unsubscribe(started.session.thread_id).await;
+            return Err(err);
+        }
+        Ok(started)
+    }
+
     pub(crate) async fn thread_inject_items(
         &mut self,
         thread_id: ThreadId,

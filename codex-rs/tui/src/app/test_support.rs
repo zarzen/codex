@@ -130,6 +130,7 @@ pub(crate) async fn make_test_app() -> Box<App> {
         cloud_title_shutdown: Default::default(),
         pending_thread_titles: HashMap::new(),
         thread_event_listener_tasks: HashMap::new(),
+        agent_console: None,
         agent_navigation: AgentNavigationState::default(),
         agents_overview: Default::default(),
         side_threads: HashMap::new(),
