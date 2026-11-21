@@ -17,7 +17,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 
 const help =
-  "agentconsole CONFIG.json\nSet main.model and components.<name>.model in the JSON configuration. Omitted models use the app-server default.\nClick a system agent to attach. Press Ctrl+X, release it, then press N for the next agent, T for Trace, or Q for Queue. Esc returns to chat.\nSelect chat text and press Ctrl+X then O to discuss it in an observer, or press d on a trace selection. Ctrl+X then O in an observer returns to its source.\nAn observer inherits the displayed model unless observer.model is set.";
+  "agentconsole CONFIG.json\nSet main.model and components.<name>.model in the JSON configuration. Omitted models use the app-server default.\nSet top-level effort to none, minimal, low, medium, high, xhigh, max, or ultra for all agents, including observers. Override it with main.effort or components.<name>.effort. Omitted effort uses existing defaults.\nClick a system agent to attach. Press Ctrl+X, release it, then press N for the next agent, T for Trace, or Q for Queue. Esc returns to chat.\nSelect chat text and press Ctrl+X then O to discuss it in an observer, or press d on a trace selection. Ctrl+X then O in an observer returns to its source.\nAn observer inherits the displayed model unless observer.model is set.";
 if (process.argv.length !== 3 || process.argv[2] === "--help") {
   console.log(help);
   process.exit(process.argv[2] === "--help" ? 0 : 2);
@@ -27,6 +27,20 @@ if (typeof WebSocket === "undefined")
 if (!process.stdin.isTTY || !process.stdout.isTTY)
   throw Error("AgentConsole requires an interactive terminal");
 const config = JSON.parse(readFileSync(process.argv[2], "utf8"));
+function validateEffort(value, path) {
+  if (
+    value !== undefined &&
+    !["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].includes(
+      value,
+    )
+  )
+    throw Error(path + " must be none, minimal, low, medium, high, xhigh, max, or ultra");
+}
+validateEffort(config.effort, "effort");
+const effortArgs =
+  config.effort === undefined
+    ? []
+    : ["-c", "model_reasoning_effort=" + JSON.stringify(config.effort)];
 const workers = Object.keys(config.components);
 if (
   !workers.length ||
@@ -49,6 +63,7 @@ for (const [path, settings] of [
     (typeof settings.model !== "string" || !settings.model.trim())
   )
     throw Error(path + ".model must be a non-empty model ID");
+  if (path !== "observer") validateEffort(settings.effort, path + ".effort");
 }
 const debugBinary = fileURLToPath(
   new URL("../../codex-rs/target/debug/codex", import.meta.url),
@@ -71,6 +86,7 @@ const control = join(directory, "console.sock");
 const daemon = spawn(
   binary,
   [
+    ...effortArgs,
     "app-server",
     "--listen",
     "ws://127.0.0.1:0",
@@ -278,9 +294,11 @@ const tool = {
   },
 };
 async function start(name, settings, extra = {}) {
+  const effort = settings.effort ?? config.effort;
   const { thread } = await rpc("thread/start", {
     cwd: process.cwd(),
     model: settings.model?.trim(),
+    config: effort === undefined ? undefined : { model_reasoning_effort: effort },
     developerInstructions: settings.instructions,
     approvalPolicy: "never",
     historyMode: "paginated",
